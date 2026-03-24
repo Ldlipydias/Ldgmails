@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The user's unique ID." },
+        "email": { "type": "string", "description": "The user's email address." },
+        "displayName": { "type": "string", "description": "The user's display name." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created." }
+      },
+      "required": ["uid", "email"]
+    },
+    "Alias": {
+      "title": "Alias",
+      "description": "An email alias created by the user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The alias's unique ID." },
+        "userId": { "type": "string", "description": "The ID of the user who owns this alias." },
+        "aliasEmail": { "type": "string", "description": "The generated alias email." },
+        "targetEmail": { "type": "string", "description": "The email address where messages are forwarded." },
+        "label": { "type": "string", "description": "A label for the alias (e.g., 'Amazon', 'Newsletter')." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the alias was created." },
+        "isActive": { "type": "boolean", "description": "Whether the alias is currently active." }
+      },
+      "required": ["id", "userId", "aliasEmail", "targetEmail"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "An email message received by an alias.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The message's unique ID." },
+        "aliasEmail": { "type": "string", "description": "The alias email that received the message." },
+        "from": { "type": "string", "description": "The sender's email address." },
+        "subject": { "type": "string", "description": "The message subject." },
+        "body": { "type": "string", "description": "The message content." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was received." }
+      },
+      "required": ["id", "aliasEmail", "from", "subject", "body", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile information."
+    },
+    "/aliases/{aliasId}": {
+      "schema": "Alias",
+      "description": "Email aliases managed by users."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages received by aliases."
+    }
+  }
+}

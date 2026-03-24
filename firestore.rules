@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (UID)
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (optional)
+    //   - photoURL: string (optional)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: aliases
+    // Document ID: aliasId (UUID/Auto-generated)
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required)
+    //   - aliasEmail: string (required)
+    //   - targetEmail: string (required)
+    //   - label: string (required)
+    //   - createdAt: timestamp (required)
+    //   - isActive: bool (required)
+    //   - description: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "kakaxe188@gmail.com");
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.uid is string &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidAlias(data) {
+      return hasRequiredFields(['id', 'userId', 'aliasEmail', 'targetEmail', 'label', 'createdAt', 'isActive']) &&
+             data.userId == request.auth.uid &&
+             isValidEmail(data.aliasEmail) &&
+             isValidEmail(data.targetEmail) &&
+             data.label is string && data.label.size() > 0 && data.label.size() < 100 &&
+             data.isActive is bool &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return data.secret == "story_webhook_secret_2026" &&
+             data.userId is string &&
+             data.aliasEmail is string &&
+             data.from is string &&
+             data.subject is string &&
+             data.body is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+    }
+
+    match /aliases/{aliasId} {
+      // Allow unauthenticated read so the server can find the userId for an alias
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidAlias(request.resource.data);
+      allow update: if isAuthenticated() && isDocOwner() && isValidAlias(request.resource.data);
+      allow delete: if isAuthenticated() && isDocOwner();
+    }
+
+    match /messages/{messageId} {
+      // Allow users to read messages for their aliases
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Allow creation from our server using the secret
+      allow create: if request.resource.data.secret == "story_webhook_secret_2026";
+    }
+
+    match /webhook_logs/{logId} {
+      // Allow creation from our server
+      allow create: if true;
+      // Allow any authenticated user to see logs for easier debugging during setup
+      allow read: if isAuthenticated();
+    }
+  }
+}
