@@ -378,7 +378,13 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                 </motion.div>
               ))
             ) : (
-              <div className="text-center py-20 space-y-4">
+              <motion.div 
+                key="empty-state"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-20 space-y-4"
+              >
                 <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto">
                   <Mail className="w-8 h-8 text-neutral-300" />
                 </div>
@@ -386,7 +392,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                   <p className="font-bold text-neutral-400">Nenhum alias encontrado</p>
                   <p className="text-xs text-neutral-400">Crie seu primeiro pseudônimo para começar.</p>
                 </div>
-              </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </section>
