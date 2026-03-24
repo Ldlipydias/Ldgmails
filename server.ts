@@ -17,15 +17,15 @@ export async function createServer() {
   const PORT = 3000;
 
   app.use(cors());
-  app.use(bodyParser.json());
-
-  // Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", firebase: !!db });
-  });
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.text({ type: 'text/*' }));
 
   // Load Firebase config
-  let firebaseConfig;
+  let firebaseConfig: any;
+  let db: any;
+  let firebaseApp: any;
+
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
     console.log(`Checking for config at: ${configPath}`);
@@ -49,10 +49,24 @@ export async function createServer() {
 
   if (!firebaseConfig || !firebaseConfig.apiKey) {
     console.error("CRITICAL: Firebase configuration is missing or incomplete!");
+  } else {
+    try {
+      firebaseApp = initializeApp(firebaseConfig);
+      db = getFirestore(firebaseApp, firebaseConfig?.firestoreDatabaseId);
+      console.log("Firebase initialized successfully.");
+    } catch (err) {
+      console.error("Error initializing Firebase:", err);
+    }
   }
 
-  const firebaseApp = initializeApp(firebaseConfig);
-  const db = getFirestore(firebaseApp, firebaseConfig?.firestoreDatabaseId);
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      firebase: !!db, 
+      configSource: fs.existsSync(path.join(process.cwd(), 'firebase-applet-config.json')) ? 'file' : 'env'
+    });
+  });
 
   // Webhook to receive emails (e.g., from Cloudflare Email Routing)
   app.get("/api/webhook/email", (req, res) => {
@@ -60,14 +74,34 @@ export async function createServer() {
   });
 
   app.post("/api/webhook/email", async (req, res) => {
-    console.log("POST /api/webhook/email hit! Body:", JSON.stringify(req.body));
+    console.log("POST /api/webhook/email hit!");
+    console.log("Headers:", JSON.stringify(req.headers));
+    console.log("Body type:", typeof req.body);
     
     try {
-      const { from, to, subject, body, secret } = req.body || {};
+      let payload = req.body;
+      
+      // Handle cases where body might be a string (if Content-Type was wrong)
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload);
+        } catch (e) {
+          console.log("Body is string but not JSON");
+        }
+      }
+
+      const { from, to, subject, body, secret } = payload || {};
+
+      console.log(`Webhook data: from=${from}, to=${to}, subject=${subject}, secret=${secret ? 'PRESENT' : 'MISSING'}`);
 
       if (secret !== "story_webhook_secret_2026") {
-        console.log("Invalid secret received");
+        console.log(`Invalid secret received: ${secret}`);
         return res.status(401).json({ success: false, error: "Secret inválido" });
+      }
+
+      if (!db) {
+        console.error("Firestore not initialized, cannot process webhook");
+        return res.status(503).json({ success: false, error: "Serviço temporariamente indisponível (DB)" });
       }
 
       // Respond success to the client
@@ -191,10 +225,13 @@ export async function createServer() {
 
 // For local development and Cloud Run
 if (process.env.NODE_ENV !== "production" || !process.env.NETLIFY) {
+  console.log(`Node.js version: ${process.version}`);
   createServer().then(app => {
     const PORT = 3000;
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
+  }).catch(err => {
+    console.error("CRITICAL: Failed to start server:", err);
   });
 }
