@@ -205,12 +205,24 @@ export async function createServer() {
   // Vite middleware for development (Skip on Netlify)
   if (!process.env.NETLIFY) {
     if (process.env.NODE_ENV !== "production") {
-      const { createServer: createViteServer } = await import("vite");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
+      console.log("Initializing Vite middleware...");
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          configFile: path.join(process.cwd(), 'vite.config.ts'),
+          server: { 
+            middlewareMode: true,
+            hmr: false // Disable HMR explicitly
+          },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+        console.log("Vite middleware initialized.");
+      } catch (viteErr: any) {
+        console.error("ERROR: Failed to initialize Vite middleware:", viteErr);
+        // Fallback or rethrow? Let's rethrow to see the full trace in logs
+        throw viteErr;
+      }
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
