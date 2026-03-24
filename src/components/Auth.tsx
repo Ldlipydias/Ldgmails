@@ -1,13 +1,27 @@
 import { signInWithPopup, auth, googleProvider } from '../firebase';
-import { Mail, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Mail, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toast } from 'react-hot-toast';
 
 export default function Auth() {
   const handleLogin = async () => {
+    const toastId = toast.loading('Conectando ao Google...');
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+      toast.success('Login realizado com sucesso!', { id: toastId });
+    } catch (error: any) {
       console.error('Login error:', error);
+      let message = 'Erro ao entrar com Google.';
+      
+      if (error.code === 'auth/unauthorized-domain') {
+        message = 'Domínio não autorizado no Firebase. Adicione "gmailsld.netlify.app" nas configurações de Autenticação.';
+      } else if (error.code === 'auth/popup-blocked') {
+        message = 'O popup de login foi bloqueado pelo seu navegador.';
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        message = 'O login foi cancelado.';
+      }
+      
+      toast.error(message, { id: toastId, duration: 6000 });
     }
   };
 
