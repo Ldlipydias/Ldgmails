@@ -8,10 +8,11 @@ import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc,
 import fs from 'fs';
 import crypto from 'crypto';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = import.meta.url ? fileURLToPath(import.meta.url) : '';
+const __dirname = __filename ? path.dirname(__filename) : '';
 
 export async function createServer() {
+  console.log("Starting server initialization...");
   const app = express();
   const PORT = 3000;
 
@@ -27,9 +28,12 @@ export async function createServer() {
   let firebaseConfig;
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    console.log(`Checking for config at: ${configPath}`);
     if (fs.existsSync(configPath)) {
+      console.log("Found firebase-applet-config.json, loading...");
       firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
     } else {
+      console.log("firebase-applet-config.json not found, using environment variables.");
       // Fallback to env vars for Netlify
       firebaseConfig = {
         apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
