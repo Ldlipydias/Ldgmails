@@ -1,18 +1,12 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import bodyParser from "body-parser";
 import cors from "cors";
-
-// We'll use the client SDK on the server for this demo to avoid service account complexity
-// In a real app, use firebase-admin
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, query, where, getDocs, limit } from 'firebase/firestore';
 import fs from 'fs';
 import crypto from 'crypto';
-
-import serverless from "serverless-http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -148,6 +142,7 @@ export async function createServer() {
   // Vite middleware for development (Skip on Netlify)
   if (!process.env.NETLIFY) {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
