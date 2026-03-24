@@ -1,4 +1,4 @@
-import { useState, useEffect, Component, ReactNode } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import { 
   auth, 
@@ -16,8 +16,17 @@ import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import { motion, AnimatePresence } from 'motion/react';
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean, error: any }> {
-  constructor(props: { children: ReactNode }) {
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }

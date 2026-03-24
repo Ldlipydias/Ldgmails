@@ -18,6 +18,11 @@ export async function createServer() {
   app.use(cors());
   app.use(bodyParser.json());
 
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", firebase: !!db });
+  });
+
   // Load Firebase config
   let firebaseConfig;
   try {
@@ -51,92 +56,112 @@ export async function createServer() {
   });
 
   app.post("/api/webhook/email", async (req, res) => {
-    // Respond immediately to avoid Worker timeout
-    res.json({ success: true, message: "Recebido" });
-
+    console.log("POST /api/webhook/email hit! Body:", JSON.stringify(req.body));
+    
     try {
-      console.log("Webhook received body:", JSON.stringify(req.body));
       const { from, to, subject, body, secret } = req.body || {};
 
-      // Log attempt immediately to Firestore with more detail
-      await addDoc(collection(db, "webhook_logs"), {
-        timestamp: serverTimestamp(),
-        from: from || "N/A",
-        to: to || "N/A",
-        subject: subject || "N/A",
-        success: secret === "story_webhook_secret_2026",
-        error: secret !== "story_webhook_secret_2026" ? "Secret inválido" : (to ? null : "Campo 'to' ausente")
-      });
+      if (secret !== "story_webhook_secret_2026") {
+        console.log("Invalid secret received");
+        return res.status(401).json({ success: false, error: "Secret inválido" });
+      }
 
-      if (secret !== "story_webhook_secret_2026") return;
-      if (!to) return;
+      // Respond success to the client
+      res.json({ success: true, message: "Recebido" });
 
-      // Extract email if it's in "Name <email@domain.com>" format
-      const extractEmail = (str: string) => {
-        if (!str) return "";
-        const match = str.match(/<([^>]+)>/);
-        return match ? match[1] : str;
-      };
+      // Continue processing in background
+      (async () => {
+        try {
+          // Log attempt immediately to Firestore
+          await addDoc(collection(db, "webhook_logs"), {
+            timestamp: serverTimestamp(),
+            from: from || "N/A",
+            to: to || "N/A",
+            subject: subject || "N/A",
+            success: true,
+            type: "test_manual"
+          });
 
-      const targetEmail = extractEmail(to).toLowerCase().trim();
-      console.log("Normalized Target Email:", targetEmail);
+          if (!to) return;
 
-      // Find the user who owns this alias using direct document lookup
-      // We now use the aliasEmail as the document ID for efficiency and security
-      const aliasDocRef = doc(db, "aliases", targetEmail);
-      let aliasSnap = await getDoc(aliasDocRef);
-      let userId: string | null = null;
-      
-      if (aliasSnap.exists()) {
-        userId = aliasSnap.data().userId;
-      } else {
-        // Fallback for legacy aliases created with random UUIDs
-        console.log(`Alias ${targetEmail} not found by ID, trying fallback query...`);
-        const q = query(collection(db, "aliases"), where("aliasEmail", "==", targetEmail), limit(1));
-        const qSnap = await getDocs(q);
-        if (!qSnap.empty) {
-          userId = qSnap.docs[0].data().userId;
+          // Extract email if it's in "Name <email@domain.com>" format
+          const extractEmail = (str: string) => {
+            if (!str) return "";
+            const match = str.match(/<([^>]+)>/);
+            return match ? match[1] : str;
+          };
+
+          const targetEmail = extractEmail(to).toLowerCase().trim();
+          console.log("Normalized Target Email:", targetEmail);
+
+          // Find the user who owns this alias using direct document lookup
+          // We now use the aliasEmail as the document ID for efficiency and security
+          const aliasDocRef = doc(db, "aliases", targetEmail);
+          let aliasSnap = await getDoc(aliasDocRef);
+          let userId: string | null = null;
+          
+          if (aliasSnap.exists()) {
+            userId = aliasSnap.data().userId;
+          } else {
+            // Fallback for legacy aliases created with random UUIDs
+            console.log(`Alias ${targetEmail} not found by ID, trying fallback query...`);
+            const q = query(collection(db, "aliases"), where("aliasEmail", "==", targetEmail), limit(1));
+            const qSnap = await getDocs(q);
+            if (!qSnap.empty) {
+              userId = qSnap.docs[0].data().userId;
+            }
+          }
+
+          if (!userId) {
+            console.log(`No alias found for ${targetEmail}`);
+            // Log failure
+            await addDoc(collection(db, "webhook_logs"), {
+              timestamp: serverTimestamp(),
+              from,
+              to: targetEmail,
+              success: false,
+              error: "Alias not found"
+            });
+            return;
+          }
+
+          const messageId = crypto.randomUUID();
+          await addDoc(collection(db, "messages"), {
+            id: messageId,
+            userId,
+            aliasEmail: targetEmail,
+            from,
+            subject: subject || "(Sem Assunto)",
+            body,
+            createdAt: serverTimestamp(),
+            secret: "story_webhook_secret_2026"
+          });
+
+          // Log success
+          await addDoc(collection(db, "webhook_logs"), {
+            timestamp: serverTimestamp(),
+            from,
+            to: targetEmail,
+            userId,
+            success: true
+          });
+
+          console.log("Message saved successfully for user:", userId);
+        } catch (bgError) {
+          console.error("Background webhook error:", bgError);
         }
-      }
-
-      if (!userId) {
-        console.log(`No alias found for ${targetEmail}`);
-        // Log failure
-        await addDoc(collection(db, "webhook_logs"), {
-          timestamp: serverTimestamp(),
-          from,
-          to: targetEmail,
-          success: false,
-          error: "Alias not found"
-        });
-        return;
-      }
-
-      const messageId = crypto.randomUUID();
-      await addDoc(collection(db, "messages"), {
-        id: messageId,
-        userId,
-        aliasEmail: targetEmail,
-        from,
-        subject: subject || "(Sem Assunto)",
-        body,
-        createdAt: serverTimestamp(),
-        secret: "story_webhook_secret_2026"
-      });
-
-      // Log success
-      await addDoc(collection(db, "webhook_logs"), {
-        timestamp: serverTimestamp(),
-        from,
-        to: targetEmail,
-        userId,
-        success: true
-      });
-
-      console.log("Message saved successfully for user:", userId);
-    } catch (error) {
+      })();
+    } catch (error: any) {
       console.error("Webhook error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: error.message });
+      }
     }
+  });
+
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error("Global error handler:", err);
+    res.status(500).json({ success: false, error: "Internal Server Error", details: err.message });
   });
 
   // Vite middleware for development (Skip on Netlify)

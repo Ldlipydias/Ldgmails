@@ -86,7 +86,9 @@ export default function Dashboard({ user, profile }: DashboardProps) {
     try {
       const response = await fetch('/api/webhook/email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           from: 'suporte@story.app.br',
           to: alias.aliasEmail,
@@ -96,16 +98,27 @@ export default function Dashboard({ user, profile }: DashboardProps) {
         })
       });
 
-      const result = await response.json();
+      let result;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        result = await response.json();
+      } else {
+        const text = await response.text();
+        console.log('Response text (not JSON):', text);
+        throw new Error(`Servidor retornou erro ${response.status}: ${text.substring(0, 100)}`);
+      }
+
+      console.log('Test result:', result, 'Status:', response.status);
+      
       if (response.ok && result.success) {
         toast.success('Teste enviado! Abra o Inbox agora.');
       } else {
-        const errorMsg = result.message || result.error || 'Erro desconhecido';
+        const errorMsg = result.message || result.error || `Status ${response.status}`;
         toast.error('Erro no teste: ' + errorMsg);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Test error:', error);
-      toast.error('Erro ao conectar com o servidor.');
+      toast.error('Erro ao conectar: ' + (error.message || 'Erro de rede'));
     } finally {
       setIsTesting(false);
     }
