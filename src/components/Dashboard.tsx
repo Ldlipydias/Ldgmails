@@ -260,12 +260,17 @@ export default function Dashboard({ user, profile }: DashboardProps) {
                 className="flex-1 py-3 bg-green-600 text-white rounded-xl text-xs font-bold hover:bg-green-700 transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 {isTesting ? (
-                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full" />
+                  <motion.div 
+                    key="testing-spinner"
+                    animate={{ rotate: 360 }} 
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }} 
+                    className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full" 
+                  />
                 ) : (
-                  <>
+                  <div key="testing-idle" className="flex items-center gap-2">
                     <Zap className="w-4 h-4" />
                     Testar Agora
-                  </>
+                  </div>
                 )}
               </button>
             </div>
@@ -307,7 +312,7 @@ export default function Dashboard({ user, profile }: DashboardProps) {
 
         {/* Alias List */}
         <section className="space-y-4 pb-24">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {filteredAliases.length > 0 ? (
               filteredAliases.map((alias) => (
                 <motion.div
