@@ -190,16 +190,34 @@ export async function createServer() {
         }
       })();
     } catch (error: any) {
-      console.error("Webhook error:", error);
+      console.error("Webhook error caught:", error);
+      const errorMessage = error?.message || (typeof error === 'string' ? error : "Unknown Webhook Error");
       if (!res.headersSent) {
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: errorMessage });
       }
     }
   });
 
   app.use((err: any, req: any, res: any, next: any) => {
-    console.error("Global error handler:", err);
-    res.status(500).json({ success: false, error: "Internal Server Error", details: err.message });
+    console.error("Global error handler caught:", err);
+    const errorMessage = err?.message || (typeof err === 'string' ? err : "Unknown Error");
+    const errorStack = err?.stack || "No stack trace available";
+    
+    console.error("Error details:", {
+      message: errorMessage,
+      stack: errorStack,
+      path: req.path,
+      method: req.method
+    });
+
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        success: false, 
+        error: "Internal Server Error", 
+        details: errorMessage,
+        type: err?.constructor?.name || 'Error'
+      });
+    }
   });
 
   // Vite middleware for development (Skip on Netlify)
